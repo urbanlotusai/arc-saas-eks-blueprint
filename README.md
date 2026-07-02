@@ -20,7 +20,7 @@
 
 A **ready-to-deploy Terraform blueprint** that provisions a production-grade multi-tenant SaaS
 platform on Amazon EKS using **9 [SourceFuse ARC](https://registry.terraform.io/namespaces/modules/sourcefuse) modules**.
-One `terraform apply` gives you:
+Deploying all modules gives you:
 
 - **EKS cluster** (namespace-per-tenant isolation, encrypted secrets)
 - **Cognito User Pool** (tenant auth, MFA, OIDC/OAuth2, SAML-ready)
@@ -37,13 +37,13 @@ No hand-wiring of Cognito app clients, KMS grants, WAF scopes, or namespace RBAC
 
 | Advantage | What it means for you |
 |---|---|
-| **Minutes, not days** | A complete, secured multi-tenant SaaS stack normally takes days of Terraform wiring — this deploys in one command. |
-| **Secure by default** | Single KMS CMK encrypts EKS secrets, Aurora, and ECR. WAF rate-limits all tenant traffic. MFA optional on general, required on HIPAA. |
-| **Compliance-ready** | Built-in `general` / `hipaa` / `pci_dss` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
+| **Minutes, not days** | A complete, secured multi-tenant SaaS stack normally takes days of Terraform wiring — this deploys with a handful of commands. |
+| **Secure by default** | Single KMS CMK encrypts EKS secrets, Aurora, and ECR. WAF rate-limits all tenant traffic. MFA optional on general, required on HIPAA/PCI. |
+| **Compliance-ready** | Built-in `general` / `hipaa` / `pci` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
 | **Multi-tenant from day one** | Namespace-per-tenant on EKS; schema-per-tenant in Aurora. Cognito pools with per-client OAuth2 flows and callback URLs. |
 | **Enterprise SSO ready** | Cognito User Pool supports SAML federation — add your IdP (Okta, Azure AD) as an identity provider post-apply. |
 | **Portable & auditable** | Pure Terraform. Version-controlled, reproducible across environments and accounts. |
-| **Beginner-friendly** | One `Makefile`, copy-paste examples per profile, and step-by-step docs for macOS, Linux, and Windows. |
+| **Independent per-module state** | Each module is its own Terraform root with its own state file — blast radius of a bad plan/apply is scoped to one module, not the whole platform. |
 
 ---
 
@@ -96,49 +96,61 @@ No hand-wiring of Cognito app clients, KMS grants, WAF scopes, or namespace RBAC
 ### 1. Prerequisites
 
 - **Terraform** `>= 1.3` ([install guide](docs/INSTALL.md))
-- **AWS credentials** configured (`aws configure`)
+- **AWS account + credentials** (`aws configure`)
 - **kubectl** installed ([install guide](https://kubernetes.io/docs/tasks/tools/))
 
-### 2. Configure
+### 2. Clone
 
 ```bash
-git clone https://github.com/sourcefuse/arc-saas-eks-blueprint.git
+git clone https://github.com/urbanlotusai/arc-saas-eks-blueprint.git
 cd arc-saas-eks-blueprint
-
-cp examples/general.tfvars terraform.tfvars
 ```
 
-Edit the mandatory values in `terraform.tfvars`:
+This blueprint uses **independent per-module Terraform state** — there is no root `main.tf`. Each `modules/NN-name/` is applied on its own, with cross-module values (like the KMS key ARN, VPC ID, and EKS cluster name) resolved via `terraform_remote_state` data sources rather than a parent module.
 
-| Variable | Example |
-|---|---|
-| `environment` | `prod` |
-| `namespace` | `myorg` |
-| `db_password` | `YourSecureDBPassword` |
-| `cognito_callback_urls` | `["https://app.example.com/callback"]` |
-| `cognito_logout_urls` | `["https://app.example.com/logout"]` |
+### 3. Bootstrap the state backend (once per environment)
 
-### 3. Deploy
+```bash
+make bootstrap ENV=dev REGION=us-east-1 NAMESPACE=myorg
+```
 
-| Step | With `make` | Raw Terraform (all OS) |
+Creates the S3 state bucket + DynamoDB lock table every module's backend uses.
+
+### 4. Deploy all modules
+
+```bash
+make apply ENV=dev REGION=us-east-1 NAMESPACE=myorg
+```
+
+This runs `terraform init` + `apply` across `modules/01-kms` through `modules/09-waf` in order.
+
+### Deploy a single module with a compliance profile
+
+```bash
+./scripts/apply-module.sh 07-db dev us-east-1 hipaa
+```
+
+Copies `modules/07-db/tfvars/hipaa.tfvars` → `terraform.tfvars` for that module, then inits/plans/applies it alone.
+
+| Step | With `make` (all modules) | Single module |
 |---|---|---|
-| Validate | `make validate` | `terraform init -backend=false && terraform validate` |
-| Preview | `make plan` | `terraform plan` |
-| Deploy | `make apply` | `terraform init && terraform apply` |
+| Validate | `make validate` | `cd modules/<NN-name> && terraform validate` |
+| Preview | `make plan` | `./scripts/apply-module.sh <name> <env> <region> <profile>` then inspect the plan |
+| Deploy | `make apply` | `./scripts/apply-module.sh <name> <env> <region> <profile>` |
 
-### 4. Set up kubectl and onboard tenants
+### 5. Set up kubectl and onboard tenants
 
 ```bash
 # Update local kubeconfig
-$(terraform output -raw kubeconfig_command)
+CLUSTER_ID=$(cd modules/04-eks && terraform output -raw cluster_id)
+aws eks update-kubeconfig --region us-east-1 --name "$CLUSTER_ID"
 
 # Create a namespace per tenant
 kubectl create namespace tenant-a
 kubectl create namespace tenant-b
 
 # Tenants authenticate via Cognito — retrieve the pool ID and client for your app config
-terraform output cognito_user_pool_id
-terraform output cognito_user_pool_endpoint
+cd modules/08-cognito && terraform output user_pool_id && terraform output endpoint
 ```
 
 ---
@@ -149,24 +161,22 @@ terraform output cognito_user_pool_endpoint
 |---|---|
 | `general` | MFA optional, 8-char passwords, 7-day Aurora PITR, WAF rate limit 5000 |
 | `hipaa` | MFA required, 14-char passwords, 35-day Aurora PITR + deletion protection, WAF rate limit 2000 |
-| `pci_dss` | MFA required, 14-char passwords, 35-day Aurora PITR + deletion protection, WAF rate limit 1000 |
+| `pci` | MFA required, 14-char passwords, 35-day Aurora PITR + deletion protection, WAF rate limit 1000 |
+
+Apply a profile to any module with `./scripts/apply-module.sh <module> <env> <region> <profile>`.
 
 ---
 
 ## Key outputs
 
 ```bash
-terraform output cluster_id                 # EKS cluster name
-terraform output cluster_endpoint           # EKS API server endpoint
-terraform output kubeconfig_command         # aws eks update-kubeconfig ...
-terraform output ecr_repository_url         # push tenant workload images here
-terraform output db_cluster_endpoint        # Aurora writer endpoint
-terraform output cognito_user_pool_id       # Cognito pool ID for app config
-terraform output cognito_user_pool_arn      # Cognito pool ARN
-terraform output cognito_user_pool_endpoint # OIDC discovery URL
-terraform output waf_arn                    # WAF Web ACL ARN — attach to ALB
-terraform output kms_key_arn                # CMK
-terraform output vpc_id                     # VPC ID
+cd modules/04-eks    && terraform output cluster_id cluster_endpoint
+cd modules/06-ecr    && terraform output repository_url
+cd modules/07-db     && terraform output cluster_endpoint
+cd modules/08-cognito && terraform output user_pool_id user_pool_arn endpoint
+cd modules/09-waf    && terraform output arn
+cd modules/01-kms    && terraform output key_arn
+cd modules/02-network && terraform output vpc_id
 ```
 
 ---
@@ -175,16 +185,15 @@ terraform output vpc_id                     # VPC ID
 
 ```
 arc-saas-eks-blueprint/
-├── main.tf                   # 9 ARC module blocks, in dependency order
-├── variables.tf              # all inputs with types & descriptions
-├── locals.tf                 # naming, tags, compliance overlays (is_hipaa, is_strict)
-├── data.tf                   # caller identity, KMS policy, subnet lookups, EKS auth
-├── outputs.tf                # cluster ID, Cognito IDs, Aurora endpoint, ECR URL
-├── version.tf                # Terraform + AWS + kubernetes + helm provider pins
-├── .terraform-version        # tfenv pin (1.9.8)
-├── terraform.tfvars.example  # copy to terraform.tfvars
-├── modules/                  # one numbered wrapper per ARC module
+├── bootstrap/                 # creates the S3 + DynamoDB state backend (apply first)
+│   ├── main.tf · variables.tf · outputs.tf
+├── modules/                   # each folder is an independent Terraform root
 │   ├── 01-kms/
+│   │   ├── config.hcl         # static backend key
+│   │   ├── main.tf            # own backend "s3" {}, own provider, own module block
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── tfvars/{general,hipaa,pci}.tfvars
 │   ├── 02-network/
 │   ├── 03-security-group/
 │   ├── 04-eks/
@@ -193,21 +202,20 @@ arc-saas-eks-blueprint/
 │   ├── 07-db/
 │   ├── 08-cognito/
 │   └── 09-waf/
-├── sample-app/                # zero-dependency Node app proving the stack end-to-end
+├── scripts/
+│   └── apply-module.sh        # apply one module with a chosen compliance profile
+├── Makefile                   # bootstrap / init / plan / apply / validate / fmt / build-sample
+├── .terraform-version         # tfenv pin (1.9.8)
+├── sample-app/                # Dockerized Node app + k8s manifests proving the stack end-to-end
 │   ├── index.js · Dockerfile · package.json
 │   ├── k8s/                   # namespace, deployment, service manifests
 │   └── README.md
-├── examples/
-│   ├── README.md
-│   ├── general.tfvars
-│   ├── hipaa.tfvars
-│   └── pci_dss.tfvars
 ├── docs/
-│   ├── INSTALL.md            # macOS · Linux · Windows setup guide
-│   └── DEPLOYMENT.md        # full deployment + tenant onboarding + rollback
-├── GETTING-STARTED.md        # beginner walkthrough + tenant onboarding
+│   ├── INSTALL.md             # macOS · Linux · Windows setup guide
+│   └── DEPLOYMENT.md          # full deployment reference + rollback
+├── GETTING-STARTED.md         # beginner walkthrough + tenant onboarding
 ├── CONTRIBUTING.md
-├── CHANGELOG.md · LICENSE · NOTICE · Makefile · VERSION
+├── CHANGELOG.md · LICENSE · NOTICE · VERSION
 └── README.md
 ```
 
@@ -218,17 +226,17 @@ arc-saas-eks-blueprint/
 - **[GETTING-STARTED.md](GETTING-STARTED.md)** — zero-to-live walkthrough including tenant onboarding
 - **[docs/INSTALL.md](docs/INSTALL.md)** — install Terraform, AWS CLI, and kubectl on macOS / Linux / Windows
 - **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** — full deployment reference, Cognito SAML setup, tenant onboarding, rollback
-- **[examples/README.md](examples/README.md)** — compliance-profile example files
+- **`modules/*/tfvars/{general,hipaa,pci}.tfvars`** — per-module compliance-profile example files
 
 ---
 
 ## Important notes
 
-- **WAF scope is REGIONAL** — attach the WAF Web ACL (`waf_arn` output) to your ALB/Ingress controller after apply. WAF is not auto-attached in this blueprint.
+- **WAF scope is REGIONAL** — attach the WAF Web ACL (`modules/09-waf` `arn` output) to your ALB/Ingress controller after apply. WAF is not auto-attached in this blueprint.
 - **Tenant isolation is namespace-level on Kubernetes** — additional RBAC policies (NetworkPolicy, ResourceQuota) per namespace are recommended before going to production. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 - **Schema-per-tenant in Aurora** — this blueprint provisions the Aurora cluster. Tenant schemas must be created by your application migration scripts; they are not Terraform-managed.
-- **Two providers need EKS to exist** — the `kubernetes` and `helm` providers reference `module.eks` outputs and can only configure after the first apply.
 - **Cognito SAML federation** — to add an enterprise IdP (Okta, Azure AD), configure a SAML identity provider on the Cognito User Pool post-apply via the AWS Console or additional Terraform resources.
+- **`kubernetes`/`helm` providers dropped** — the old single-shared-state `version.tf` configured `kubernetes`/`helm` providers off `module.eks` outputs for potential future Helm-based add-ons, but no resource in the 9 ARC module blocks actually used them. Since this conversion is scoped to those 9 modules, they are not carried over; add them back in your own Helm-based add-on module if needed, wired via `data.terraform_remote_state.eks` instead of a local module reference.
 
 ---
 

@@ -1,3 +1,4 @@
 output "arn" {
-  value = module.waf.arn
+  description = "WAF Web ACL ARN (REGIONAL). Attach to your ALB/Ingress."
+  value       = module.waf.arn
 }

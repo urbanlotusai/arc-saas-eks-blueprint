@@ -1,8 +1,74 @@
+# =============================================================================
+# Module: 07-db
+# =============================================================================
+# Provisions the Aurora cluster used as the multi-tenant data store
+# (schema-per-tenant pattern).
+# State file: modules/07-db/terraform.tfstate
+# Depends on: 02-network (VPC ID, private subnets), 01-kms (encryption key)
+# =============================================================================
+
+terraform {
+  required_version = ">= 1.3.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 5.0, < 7.0"
+    }
+  }
+
+  backend "s3" {}
+}
+
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = var.tags
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Data Sources
+# -----------------------------------------------------------------------------
+
+data "terraform_remote_state" "network" {
+  backend = "s3"
+
+  config = {
+    bucket = var.state_bucket_name
+    key    = "modules/02-network/terraform.tfstate"
+    region = var.region
+  }
+}
+
+data "terraform_remote_state" "kms" {
+  backend = "s3"
+
+  config = {
+    bucket = var.state_bucket_name
+    key    = "modules/01-kms/terraform.tfstate"
+    region = var.region
+  }
+}
+
+data "aws_subnets" "private" {
+  filter {
+    name   = "vpc-id"
+    values = [data.terraform_remote_state.network.outputs.vpc_id]
+  }
+  tags = { Type = "private" }
+}
+
+# -----------------------------------------------------------------------------
+# Aurora DB Module
+# -----------------------------------------------------------------------------
+
 module "db" {
   source  = "sourcefuse/arc-db/aws"
   version = "4.0.4"
 
-  name        = var.name
+  name        = "${var.namespace}-${var.environment}-tenant-db"
   namespace   = var.namespace
   environment = var.environment
 
@@ -14,11 +80,13 @@ module "db" {
 
   username = var.username
 
-  vpc_id                = var.vpc_id
-  db_subnet_group_data  = var.db_subnet_group_data
+  vpc_id = data.terraform_remote_state.network.outputs.vpc_id
+  db_subnet_group_data = {
+    subnet_ids = data.aws_subnets.private.ids
+  }
 
   storage_encrypted       = true
-  kms_key_id              = var.kms_key_id
+  kms_key_id              = data.terraform_remote_state.kms.outputs.key_arn
   instance_class          = var.instance_class
   backup_retention_period = var.backup_retention_period
   deletion_protection     = var.deletion_protection

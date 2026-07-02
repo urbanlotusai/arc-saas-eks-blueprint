@@ -181,7 +181,22 @@ arc-saas-eks-blueprint/
 ├── data.tf                   # caller identity, KMS policy, subnet lookups, EKS auth
 ├── outputs.tf                # cluster ID, Cognito IDs, Aurora endpoint, ECR URL
 ├── version.tf                # Terraform + AWS + kubernetes + helm provider pins
+├── .terraform-version        # tfenv pin (1.9.8)
 ├── terraform.tfvars.example  # copy to terraform.tfvars
+├── modules/                  # one numbered wrapper per ARC module
+│   ├── 01-kms/
+│   ├── 02-network/
+│   ├── 03-security-group/
+│   ├── 04-eks/
+│   ├── 05-eks-addon/
+│   ├── 06-ecr/
+│   ├── 07-db/
+│   ├── 08-cognito/
+│   └── 09-waf/
+├── sample-app/                # zero-dependency Node app proving the stack end-to-end
+│   ├── index.js · Dockerfile · package.json
+│   ├── k8s/                   # namespace, deployment, service manifests
+│   └── README.md
 ├── examples/
 │   ├── README.md
 │   ├── general.tfvars

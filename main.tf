@@ -3,14 +3,12 @@
 #    Outputs consumed by: module.eks, module.db, module.s3
 # ═══════════════════════════════════════════════════════════════════════════════
 module "kms" {
-  source  = "sourcefuse/arc-kms/aws"
-  version = "1.0.11"
+  source = "./modules/01-kms"
 
   alias                   = local.kms_alias
   policy                  = data.aws_iam_policy_document.kms.json
   description             = "CMK for ${local.name_prefix} Multi-Tenant SaaS on EKS"
   deletion_window_in_days = var.kms_deletion_window
-  enable_key_rotation     = true
 
   tags = local.tags
 }
@@ -19,8 +17,7 @@ module "kms" {
 # 2. Network — VPC + subnets for the SaaS platform
 # ═══════════════════════════════════════════════════════════════════════════════
 module "network" {
-  source  = "sourcefuse/arc-network/aws"
-  version = "3.0.14"
+  source = "./modules/02-network"
 
   name        = local.name_prefix
   namespace   = var.namespace
@@ -34,8 +31,7 @@ module "network" {
 # 3. Security Group — EKS cluster, tenant workloads, and DB
 # ═══════════════════════════════════════════════════════════════════════════════
 module "security_group" {
-  source  = "sourcefuse/arc-security-group/aws"
-  version = "0.0.5"
+  source = "./modules/03-security-group"
 
   name        = "${local.name_prefix}-saas"
   description = "Security group for SaaS EKS cluster, Aurora, and services"
@@ -69,8 +65,7 @@ module "security_group" {
 #    Outputs consumed by: module.eks_addons, kubernetes/helm providers
 # ═══════════════════════════════════════════════════════════════════════════════
 module "eks" {
-  source  = "sourcefuse/arc-eks/aws"
-  version = "6.0.4"
+  source = "./modules/04-eks"
 
   name        = local.cluster_name
   namespace   = var.namespace
@@ -110,8 +105,7 @@ module "eks" {
 # 5. EKS Addons — VPC CNI, CoreDNS, kube-proxy, EBS CSI
 # ═══════════════════════════════════════════════════════════════════════════════
 module "eks_addons" {
-  source  = "sourcefuse/arc-eks-addon/aws"
-  version = "1.0.3"
+  source = "./modules/05-eks-addon"
 
   cluster_name = module.eks.cluster_id
 
@@ -129,8 +123,7 @@ module "eks_addons" {
 # 6. ECR — container registry for tenant workload images
 # ═══════════════════════════════════════════════════════════════════════════════
 module "ecr" {
-  source  = "sourcefuse/arc-ecr/aws"
-  version = "0.0.4"
+  source = "./modules/06-ecr"
 
   name                 = local.ecr_repo_name
   image_tag_mutability = "IMMUTABLE"
@@ -153,17 +146,14 @@ module "ecr" {
 #    Outputs consumed by: (tenant services via secrets at runtime)
 # ═══════════════════════════════════════════════════════════════════════════════
 module "db" {
-  source  = "sourcefuse/arc-db/aws"
-  version = "4.0.4"
+  source = "./modules/07-db"
 
   name        = local.db_name
   namespace   = var.namespace
   environment = var.environment
 
   engine         = var.db_engine
-  engine_type    = "cluster"
   engine_version = var.db_engine_version
-  license_model  = "general-public-license"
   port           = 5432
 
   username = var.db_username
@@ -173,7 +163,6 @@ module "db" {
     subnet_ids = data.aws_subnets.private.ids
   }
 
-  storage_encrypted       = true
   kms_key_id              = module.kms.key_arn
   instance_class          = var.db_instance_class
   backup_retention_period = local.is_strict ? 35 : 7
@@ -187,8 +176,7 @@ module "db" {
 #    Supports SSO/SAML federation for enterprise tenants
 # ═══════════════════════════════════════════════════════════════════════════════
 module "cognito" {
-  source  = "sourcefuse/arc-cognito-userpool/aws"
-  version = "0.0.1"
+  source = "./modules/08-cognito"
 
   name = local.cognito_pool_name
 
@@ -197,12 +185,12 @@ module "cognito" {
 
   # Password policy
   password_policy = {
-    minimum_length    = local.is_strict ? 14 : 8
-    require_lowercase = true
-    require_numbers   = true
-    require_symbols   = true
-    require_uppercase = true
-    temporary_password_validity_days = 7
+    minimum_length                    = local.is_strict ? 14 : 8
+    require_lowercase                 = true
+    require_numbers                   = true
+    require_symbols                   = true
+    require_uppercase                 = true
+    temporary_password_validity_days  = 7
   }
 
   # App client for each SaaS application
@@ -231,8 +219,7 @@ module "cognito" {
 #    WAF is REGIONAL for ALB; attach to the ALB after apply
 # ═══════════════════════════════════════════════════════════════════════════════
 module "waf" {
-  source  = "sourcefuse/arc-waf/aws"
-  version = "1.0.6"
+  source = "./modules/09-waf"
 
   web_acl_name           = local.waf_name
   web_acl_default_action = "ALLOW"

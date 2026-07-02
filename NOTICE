@@ -1,0 +1,15 @@
+ARC Multi-Tenant SaaS on EKS Blueprint
+Copyright 2026 SourceFuse
+
+Licensed under the Apache License, Version 2.0.
+
+This product composes:
+  - sourcefuse/arc-kms/aws
+  - sourcefuse/arc-network/aws
+  - sourcefuse/arc-security-group/aws
+  - sourcefuse/arc-eks/aws
+  - sourcefuse/arc-eks-addon/aws
+  - sourcefuse/arc-ecr/aws
+  - sourcefuse/arc-db/aws
+  - sourcefuse/arc-cognito-userpool/aws
+  - sourcefuse/arc-waf/aws

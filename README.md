@@ -39,7 +39,7 @@ No hand-wiring of Cognito app clients, KMS grants, WAF scopes, or namespace RBAC
 |---|---|
 | **Minutes, not days** | A complete, secured multi-tenant SaaS stack normally takes days of Terraform wiring — this deploys in one command. |
 | **Secure by default** | Single KMS CMK encrypts EKS secrets, Aurora, and ECR. WAF rate-limits all tenant traffic. MFA optional on general, required on HIPAA. |
-| **Compliance-ready** | Built-in `general` / `hipaa` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
+| **Compliance-ready** | Built-in `general` / `hipaa` / `pci_dss` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
 | **Multi-tenant from day one** | Namespace-per-tenant on EKS; schema-per-tenant in Aurora. Cognito pools with per-client OAuth2 flows and callback URLs. |
 | **Enterprise SSO ready** | Cognito User Pool supports SAML federation — add your IdP (Okta, Azure AD) as an identity provider post-apply. |
 | **Portable & auditable** | Pure Terraform. Version-controlled, reproducible across environments and accounts. |
@@ -149,6 +149,7 @@ terraform output cognito_user_pool_endpoint
 |---|---|
 | `general` | MFA optional, 8-char passwords, 7-day Aurora PITR, WAF rate limit 5000 |
 | `hipaa` | MFA required, 14-char passwords, 35-day Aurora PITR + deletion protection, WAF rate limit 2000 |
+| `pci_dss` | MFA required, 14-char passwords, 35-day Aurora PITR + deletion protection, WAF rate limit 1000 |
 
 ---
 
@@ -184,7 +185,8 @@ arc-saas-eks-blueprint/
 ├── examples/
 │   ├── README.md
 │   ├── general.tfvars
-│   └── hipaa.tfvars
+│   ├── hipaa.tfvars
+│   └── pci_dss.tfvars
 ├── docs/
 │   ├── INSTALL.md            # macOS · Linux · Windows setup guide
 │   └── DEPLOYMENT.md        # full deployment + tenant onboarding + rollback

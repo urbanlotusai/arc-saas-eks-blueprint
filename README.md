@@ -37,13 +37,13 @@ No hand-wiring of Cognito app clients, KMS grants, WAF scopes, or namespace RBAC
 
 | Advantage | What it means for you |
 |---|---|
-| ⚡ **Minutes, not days** | A complete, secured multi-tenant SaaS stack normally takes days of Terraform wiring — this deploys in one command. |
-| 🔒 **Secure by default** | Single KMS CMK encrypts EKS secrets, Aurora, and ECR. WAF rate-limits all tenant traffic. MFA optional on general, required on HIPAA. |
-| 🏛️ **Compliance-ready** | Built-in `general` / `hipaa` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
-| 🧩 **Multi-tenant from day one** | Namespace-per-tenant on EKS; schema-per-tenant in Aurora. Cognito pools with per-client OAuth2 flows and callback URLs. |
-| 🔐 **Enterprise SSO ready** | Cognito User Pool supports SAML federation — add your IdP (Okta, Azure AD) as an identity provider post-apply. |
-| 📦 **Portable & auditable** | Pure Terraform. Version-controlled, reproducible across environments and accounts. |
-| 🛠️ **Beginner-friendly** | One `Makefile`, copy-paste examples per profile, and step-by-step docs for macOS, Linux, and Windows. |
+| **Minutes, not days** | A complete, secured multi-tenant SaaS stack normally takes days of Terraform wiring — this deploys in one command. |
+| **Secure by default** | Single KMS CMK encrypts EKS secrets, Aurora, and ECR. WAF rate-limits all tenant traffic. MFA optional on general, required on HIPAA. |
+| **Compliance-ready** | Built-in `general` / `hipaa` profiles flip MFA mode, password policy, Aurora PITR (35 days), deletion protection, and WAF rate limits — no manual edits. |
+| **Multi-tenant from day one** | Namespace-per-tenant on EKS; schema-per-tenant in Aurora. Cognito pools with per-client OAuth2 flows and callback URLs. |
+| **Enterprise SSO ready** | Cognito User Pool supports SAML federation — add your IdP (Okta, Azure AD) as an identity provider post-apply. |
+| **Portable & auditable** | Pure Terraform. Version-controlled, reproducible across environments and accounts. |
+| **Beginner-friendly** | One `Makefile`, copy-paste examples per profile, and step-by-step docs for macOS, Linux, and Windows. |
 
 ---
 
